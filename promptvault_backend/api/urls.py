@@ -9,4 +9,5 @@ router.register(r'tags', TagViewSet, basename='tag')
 urlpatterns = [
     path('', include(router.urls)),
     path('user/me/', current_user_api, name='current-user'),
+    
 ]

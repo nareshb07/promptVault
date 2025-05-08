@@ -17,7 +17,11 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
             return True
         # Write permissions are only allowed to the author of the prompt.
         return obj.author == request.user
+    
 
+# from django.views.decorators.csrf import csrf_exempt
+
+# @csrf_exempt
 class PromptViewSet(viewsets.ModelViewSet):
     serializer_class = PromptSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly] # Require auth, and owner for edit/delete
