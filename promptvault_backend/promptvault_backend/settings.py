@@ -37,20 +37,78 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
+
+    'django.contrib.sites',  # Required by allauth
+    
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    # Specific provider (Google)
+    'allauth.socialaccount.providers.google',
+
     'rest_framework',  # Add this
     'api.apps.ApiConfig',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    
+
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
+## not production safe
+# SESSION_COOKIE_SAMESITE = 'Lax' # Or 'None' if using HTTPS
+# CSRF_COOKIE_SAMESITE = 'Lax'    # Or 'None' if using HTTPS
+# If you set SameSite='None', you MUST also set:
+# SESSION_COOKIE_SECURE = True (Requires HTTPS)
+# CSRF_COOKIE_SECURE = True (Requires HTTPS)
+# ... other settings ...
+
+#  Explicitly set HttpOnly for security, though it's default
+# SESSION_COOKIE_HTTPONLY = True
+# CSRF_COOKIE_HTTPONLY = False # CSRF token needs to be readable by JS if you fetch it
+
+# SESSION_COOKIE_SAMESITE = 'None'
+# # SESSION_COOKIE_SECURE = False # For HTTP development ONLY
+# CSRF_COOKIE_SAMESITE = 'None' # Match this for consistency if needed
+# # CSRF_COOKIE_SECURE = False 
+
+# # For development, ensure Secure flags are False if not using HTTPS
+# SESSION_COOKIE_SECURE = False
+# CSRF_COOKIE_SECURE = False
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173", # Your React app's development URL
+    "http://127.0.0.1:5173",
+    # Also add this for consistency
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173', # Add this if it's missing or incorrect
+]
+# OR for very open development (less secure, use specific origins for production)
+CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOW_CREDENTIALS = True # IMPORTANT: This allows cookies to be sent cross-origin
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.SessionAuthentication',
+    )
+}
+
+SITE_ID = 1      # added 
 ROOT_URLCONF = 'promptvault_backend.urls'
 
 TEMPLATES = [
@@ -69,6 +127,55 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'promptvault_backend.wsgi.application'
+# ---------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------
+AUTHENTICATION_BACKENDS = [
+    # Needed to login by username in Django admin, regardless of `allauth`
+    'django.contrib.auth.backends.ModelBackend',
+
+    # `allauth` specific authentication methods, such as login by e-mail
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+# Django Allauth specific settings
+ACCOUNT_LOGIN_METHODS = {'email'}
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None # No username field
+ACCOUNT_EMAIL_VERIFICATION = 'none'     # Or 'optional' or 'mandatory'. 'none' for simplicity now.
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
+ACCOUNT_LOGOUT_ON_GET = True # Allows logout via a simple GET request (can be a security consideration, but simpler for now)
+
+# Social Account Specific Settings
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        # For each OAuth based provider, either add a ``SocialApp``
+        # (``socialaccount`` app) containing the client_id and secret
+        # or list them here:
+        # 'APP': {
+        #     # These will be filled in Step 5 from Google Cloud Console
+        #     'client_id': '97595163668-uubmnab9omr7ref9cu0odosufp7vlapk.apps.googleusercontent.com',
+        #     'secret': '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',
+        #     'key': '' # Not typically needed for Google
+        # },
+        'SCOPE': [  # What information you want from Google
+            'profile',
+            'email',  
+        ],
+        'AUTH_PARAMS': { # Additional authentication parameters
+            'access_type': 'online',
+        }
+    }
+}
+
+# Redirect URLs (important for SPA like React)
+LOGIN_REDIRECT_URL = '/'  # Where to redirect after login (Django's perspective)
+LOGOUT_REDIRECT_URL = '/' # Where to redirect after logout (Django's perspective)
+# For SPA, you'll often handle redirects on the frontend after getting a token.
+# We'll adjust this later if needed when integrating with React.
+
+
+# -------------------------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------------------------
 
 
 # Database
