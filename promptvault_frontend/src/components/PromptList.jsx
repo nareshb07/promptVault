@@ -43,3 +43,4 @@ const PromptList = ({ prompts, isLoading, error, onEdit, onDelete, onCopy }) => 
 };
 
 export default PromptList;
+
