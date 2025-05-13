@@ -37,8 +37,9 @@ const MyPromptsPage = () => {
 
     try {
       const response = await apiClient.get(`/prompts/?page=${page}`);
-      setPrompts(response.data.results || response.data);
-      setTotalPages(response.data.total_pages || 1);
+      setPrompts(response.data.results || []);
+      const totalPages = Math.ceil(response.data.count / 5);
+      setTotalPages(totalPages);
     } catch (err) {
       console.error("Error fetching prompts:", err);
       setError('Failed to fetch prompts. Please try again later.');
@@ -49,11 +50,13 @@ const MyPromptsPage = () => {
 
   useEffect(() => {
     fetchPrompts(currentPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [fetchPrompts, currentPage]);
 
   const handlePageChange = (newPage) => {
-    if (newPage < 1 || newPage > totalPages) return;
-    setCurrentPage(newPage);
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
   };
 
   const handlePromptCreated = (newPrompt) => {
@@ -176,34 +179,51 @@ const MyPromptsPage = () => {
               </div>
             )}
 
-            {totalPages > 1 && (
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-              />
-            )}
+              {
+              totalPages > 1 && 
+              (
+                <div className="mt-6">
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={handlePageChange}
+                  />
+                </div>
+              )}
           </>
         )}
 
-<div>
-<button
-    onClick={() => setIsFormVisible(prev => !prev)}
-    className="px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-md"
-    aria-label="Create new prompt"
-  >
-      add new prompt
-  </button>
+          <div className="fixed bottom-6 right-40 z-50">
+            <button
+              onClick={() => setIsFormVisible(true)}
+              className="flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-lg transform transition-transform hover:scale-105 focus:outline-none"
+              aria-label="Create new prompt"
+            >
+              <FiPlus className="w-5 h-5" />
+              {/* <span className="font-medium">Add New Prompt</span> */}
+            </button>
 
-  {isFormVisible && (
-          <PromptForm
-            onPromptCreated={handlePromptCreated}
-            onPromptUpdated={handlePromptUpdated}
-          />
-        )}
-</div>
+          </div>
+        
 
-
+          <EditModal isOpen={isFormVisible} onClose={() => setIsFormVisible(false)}>
+              <div className="max-h-[80vh] overflow-y-auto pr-2">
+                <h2 className="text-xl font-semibold mb-4 text-white border-b border-gray-700 pb-2">
+                  {editingPrompt ? 'Edit Prompt' : 'Create New Prompt'}
+                </h2>
+                <PromptForm
+                  onPromptCreated={(newPrompt) => {
+                    handlePromptCreated(newPrompt);
+                    setIsFormVisible(false);
+                  }}
+                  existingPromptData={editingPrompt}
+                  onPromptUpdated={(updatedPrompt) => {
+                    handlePromptUpdated(updatedPrompt);
+                    setIsFormVisible(false);
+                  }}
+                />
+              </div>
+            </EditModal>
 
 
         <EditModal isOpen={!!editingPrompt} onClose={() => setEditingPrompt(null)}>
@@ -240,26 +260,22 @@ const MyPromptsPage = () => {
           <h2 className="text-xl font-semibold text-gray-100 mb-4">Are you sure?</h2>
           <p className="text-gray-400 mb-6">This action will permanently delete the prompt.</p>
           <div className="flex justify-center gap-4">
+          <button
+              className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
+              onClick={() => setIsDeleteModalOpen(false)}
+            >
+              Cancel
+            </button>
             <button
               className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg"
               onClick={confirmDeletePrompt}
             >
               Delete
             </button>
-            <button
-              className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
-              onClick={() => setIsDeleteModalOpen(false)}
-            >
-              Cancel
-            </button>
+            
           </div>
         </div>
       </DeleteModal>
-
-      
-
-      
-
     </div>
   );
 };

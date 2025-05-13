@@ -21,6 +21,7 @@ class PromptSerializer(serializers.ModelSerializer):
         write_only=True, # This field is only for input, not for output
         required=False   # Makes sending tags optional
     )
+    score = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Prompt
@@ -34,10 +35,17 @@ class PromptSerializer(serializers.ModelSerializer):
             'tag_names',      # For writing tags by name
             'is_public',
             'created_at',
-            'updated_at'
+            'updated_at',
+            'score'
             # Add 'upvotes_count', 'downvotes_count', 'copied_from' if they are in your model
         ]
         read_only_fields = ['author', 'author_username', 'created_at', 'updated_at'] # 'author' set in create/update
+    
+    
+    def get_score(self, obj):
+        # Use a simple net score for now; can expand later
+        return obj.upvotes - obj.downvotes
+
 
     def _handle_tags(self, prompt_instance, tag_names_data):
         """

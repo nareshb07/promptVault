@@ -156,14 +156,19 @@ const PromptForm = ({ promptToEdit = null, existingPromptData = null, onPromptCr
       <div>
         <label htmlFor="promptText" className="block font-medium text-gray-700 dark:text-gray-300 mb-1">Prompt Text *</label>
         <textarea
-          id="promptText"
-          rows="5"
-          value={promptText}
-          onChange={(e) => setPromptText(e.target.value)}
-          placeholder="Enter your prompt here..."
-          className="w-full px-3 py-2 bg-transparent border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-indigo-500 dark:text-white"
-        />
-      </div>
+            id="promptText"
+            value={promptText}
+            onChange={(e) => {
+              const textarea = e.target;
+              textarea.style.height = 'auto'; // Reset height
+              textarea.style.height = `${textarea.scrollHeight}px`; // Set to fit content
+              setPromptText(textarea.value);
+            }}
+            placeholder="Enter your prompt here..."
+            style={{ resize: 'none', overflow: 'scroll',maxHeight: '200px' }}
+            className="w-full min-h-[24px] px-3 py-2 bg-transparent border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-indigo-500 dark:text-white text-sm"
+          />
+      </div> 
 
       {/* Tags */}
       <div>

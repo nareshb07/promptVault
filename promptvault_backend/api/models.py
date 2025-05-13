@@ -14,8 +14,8 @@ class Prompt(models.Model):
     prompt_text = models.TextField()
     tags = models.ManyToManyField(Tag, related_name='prompts', blank=True)
     is_public = models.BooleanField(default=False) # All private for now
-    # upvotes_count = models.IntegerField(default=0) # Add later in Phase 3
-    # downvotes_count = models.IntegerField(default=0) # Add later in Phase 3
+    upvotes = models.PositiveIntegerField(default=0)
+    downvotes = models.PositiveIntegerField(default=0)
     # copied_from = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='copies') # Add later
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -25,3 +25,18 @@ class Prompt(models.Model):
 
     class Meta:
         ordering = ['-created_at'] # Default ordering
+
+
+
+class PromptVote(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    prompt = models.ForeignKey(Prompt, on_delete=models.CASCADE)
+    VOTE_TYPES = [('up', 'Upvote'), ('down', 'Downvote')]
+    vote_type = models.CharField(max_length=4, choices=VOTE_TYPES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'prompt')
+
+    def __str__(self):
+        return f"{self.user} {self.vote_type}d {self.prompt.title}"
