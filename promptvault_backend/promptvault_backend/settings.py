@@ -109,7 +109,7 @@ REST_FRAMEWORK = {
     )
 }
 
-SITE_ID = 1      # added 
+SITE_ID = 2      # added 
 ROOT_URLCONF = 'promptvault_backend.urls'
 
 TEMPLATES = [
@@ -182,12 +182,26 @@ LOGOUT_REDIRECT_URL = '/' # Where to redirect after logout (Django's perspective
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# settings.py
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'postgres',           # e.g. aptitude_db
+        'USER': 'postgres',           # e.g. postgres
+        'PASSWORD': '1243',   # e.g. your password
+        'HOST': 'localhost',              # or the actual DB host
+        'PORT': '5432',                   # default PostgreSQL port
     }
 }
+
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
 
 # Password validation

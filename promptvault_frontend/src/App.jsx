@@ -3,6 +3,8 @@ import { Routes, Route, Link, Navigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import HomePage from './pages/HomePage';
 import MyPromptsPage from './pages/MyPromptsPage';
+import TrendingPrompts from './components/TrendingPrompts';
+
 
 function App() {
   const { user, logout } = useAuth();
@@ -52,6 +54,14 @@ function App() {
                   </Link>
                 </li>
                 
+                <li >
+                  <Link to = "/trending">
+                    <span>Trending</span>
+                  </Link>
+                </li>
+
+
+
                 <li className="ml-4 flex items-center gap-4">
                   <div className="hidden md:flex items-center gap-2">
                     <div className="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-medium">
@@ -84,6 +94,8 @@ function App() {
                 </a>
               </li>
             )}
+
+            
           </ul>
         </div>
       </nav>
@@ -95,7 +107,8 @@ function App() {
             path="/my-prompts"
             element={user ? <MyPromptsPage /> : <Navigate to="/" replace />}
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />;
+          <Route path='/trending' element = { <TrendingPrompts/>} />
         </Routes>
       </main>
 

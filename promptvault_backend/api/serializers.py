@@ -36,7 +36,10 @@ class PromptSerializer(serializers.ModelSerializer):
             'is_public',
             'created_at',
             'updated_at',
-            'score'
+            'score',
+            'upvotes',     # ✅ Add this
+            'downvotes',
+            
             # Add 'upvotes_count', 'downvotes_count', 'copied_from' if they are in your model
         ]
         read_only_fields = ['author', 'author_username', 'created_at', 'updated_at'] # 'author' set in create/update

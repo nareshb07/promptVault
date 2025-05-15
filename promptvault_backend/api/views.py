@@ -10,9 +10,13 @@ from django.utils.timezone import now
 from datetime import timedelta
 import math
 import logging
-
 from .models import Prompt, Tag
 from .serializers import PromptSerializer, TagSerializer, UserSerializer
+from datetime import datetime
+from .pagination import TrendingPromptsPagination
+from django.http import HttpResponse
+
+
 
 # ======================
 # Setup Logging
@@ -104,10 +108,6 @@ class TrendingPromptsPagination(StandardResultsSetPagination):
     page_size = 5
     page_size_query_param = 'page_size'
 
-# from django.db.models.functions import ExtractHour, ExtractEpoch
-# from django.db.models import F, ExpressionWrapper, FloatField
-from datetime import datetime
-
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def trending_prompts(request):
@@ -125,28 +125,23 @@ def trending_prompts(request):
 
         # 🔍 Optional tag filtering
         queryset = Prompt.objects.filter(is_public=True)
+        print("Queryset:", queryset.query)
         if tag_name:
             queryset = queryset.filter(tags__name__iexact=tag_name)
 
         # Annotate with score and age
-        # queryset = queryset.annotate(
-        #     score=F('upvotes') - F('downvotes'),
-        #     age_delta=ExpressionWrapper(
-        #         Now() - F('created_at'), output_field=fields.DurationField()
-        #         ),
-        # ).annotate(
-        #     hours_old=ExpressionWrapper(
-        #         Extract('age_delta', 'epoch') / 3600,
-        #         output_field=fields.FloatField()
-        #     )
-        # ).
-
         queryset = queryset.annotate(
             score=F('upvotes') - F('downvotes'),
-            hours_old= (datetime.now() - queryset.created_at).total_seconds() / 3600
+            age_delta=ExpressionWrapper(Now() - F('created_at'), output_field=fields.DurationField()),
+        ).annotate(
+            hours_old=ExpressionWrapper(
+                Extract('age_delta', 'epoch') / 3600,
+                output_field=fields.FloatField()
+            )
         )
 
         prompts = list(queryset)
+        print("Results:", prompts)     
 
         def calculate_trending_score(prompt):
             """Score = (upvotes - downvotes) / log(age_in_hours + 2)"""
@@ -167,7 +162,9 @@ def trending_prompts(request):
 
         serializer = PromptSerializer(page, many=True, context={'request': request})
         logger.info(f"Returning {len(serializer.data)} trending prompts")
-        return paginator.get_paginated_response(serializer.data)
+        paginated_data=  paginator.get_paginated_response(serializer.data).data
+        print(paginated_data)
+        return Response(paginated_data)
 
     except Exception as e:
         logger.error("Error fetching trending prompts: %s", str(e))
@@ -176,99 +173,6 @@ def trending_prompts(request):
 # views.py
 
 from .models import PromptVote
-
-# without Cache
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def upvote_prompt(request, pk):
-    user = request.user
-    try:
-        prompt = Prompt.objects.get(pk=pk, is_public=True)
-
-        existing_vote = PromptVote.objects.filter(user=user, prompt=prompt).first()
-        if existing_vote:
-            if existing_vote.vote_type == 'up':
-                return Response({'status': 'already_upvoted'}, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                prompt.downvotes -= 1
-                prompt.upvotes += 1
-                prompt.save(update_fields=['upvotes', 'downvotes'])
-                existing_vote.vote_type = 'up'
-                existing_vote.save()
-        else:
-            prompt.upvotes += 1
-            prompt.save(update_fields=['upvotes'])
-            PromptVote.objects.create(user=user, prompt=prompt, vote_type='up')
-
-        return Response({'id': prompt.id, 'score': prompt.upvotes - prompt.downvotes})
-
-    except Prompt.DoesNotExist:
-        logger.warning("Prompt not found for upvote: %s", pk)
-        return Response({'error': 'Prompt not found'}, status=status.HTTP_404_NOT_FOUND)
-    
-# from django.core.cache import cache
-# def trending_prompts(request):
-#     """
-#     GET /api/prompts/trending/
-#     Returns public prompts sorted by trending score: (upvotes - downvotes) / log(hours_old + 2)
-#     Optional query params: ?tag=ai | ?page=1
-#     """
-#     logger.info("Fetching trending prompts...")
-
-#     # 🔥 Cache key based on tag
-#     tag_name = request.query_params.get('tag', 'all')
-#     cache_key = f'trending_prompts_{tag_name}'
-#     cached = cache.get(cache_key)
-
-#     if cached:
-#         logger.debug("Serving from cache")
-#         return Response(cached)
-
-#     try:
-#         queryset = Prompt.objects.filter(is_public=True)
-#         if tag_name != 'all':
-#             queryset = queryset.filter(tags__name__iexact=tag_name)
-
-#         # Annotate time and score
-#         queryset = queryset.annotate(
-#             score=F('upvotes') - F('downvotes'),
-#             age_delta=ExpressionWrapper(Now() - F('created_at'), output_field=fields.DurationField())
-#         ).annotate(
-#             hours_old=ExpressionWrapper(
-#                 Extract('age_delta', 'epoch') / 3600,
-#                 output_field=fields.FloatField()
-#             )
-#         )
-
-#         prompts = list(queryset)
-
-#         def calculate_trending_score(prompt):
-#             try:
-#                 hours_old = prompt.hours_old or (now() - prompt.created_at).total_seconds() / 3600
-#             except:
-#                 hours_old = (now() - prompt.created_at).total_seconds() / 3600
-
-#             decay = math.log(hours_old + 2)
-#             return prompt.score / decay if decay > 0 else prompt.score
-
-#         prompts.sort(key=calculate_trending_score, reverse=True)
-
-#         # Serialize
-#         paginator = TrendingPromptsPagination()
-#         page = paginator.paginate_queryset(prompts, request)
-#         serializer = PromptSerializer(page, many=True, context={'request': request})
-#         response_data = paginator.get_paginated_response(serializer.data).data
-
-#         # Store in cache for 5 minutes
-#         cache.set(cache_key, response_data, timeout=300)
-
-#         logger.info("Trending prompts fetched and cached.")
-#         return Response(response_data)
-
-#     except Exception as e:
-#         logger.error("Error fetching trending prompts: %s", str(e))
-#         return Response({"error": "Failed to fetch trending prompts"}, status=500)
 
 
 

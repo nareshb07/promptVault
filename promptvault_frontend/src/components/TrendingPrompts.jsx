@@ -1,58 +1,99 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import apiClient from '../services/api';
 
 const TrendingPrompts = () => {
   const [prompts, setPrompts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [userVotes, setUserVotes] = useState({}); // { promptId: 'up'|'down'|null }
 
-  // Load trending prompts
   const fetchTrending = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const res = await fetch('/api/prompts/trending/');
-      if (!res.ok) throw new Error('Failed to load trending prompts');
-      console.log(res.json());
-      const data = await res.json();
-    //   console.log(data);
+      const res = await apiClient.get('/prompts/trending/');
+      const promptsData = res.data.results || res.data;
+      setPrompts(promptsData);
       
-      setPrompts(data);
+      // Initialize userVotes state from API data
+      const votesMap = {};
+      promptsData.forEach(prompt => {
+        votesMap[prompt.id] = prompt.user_vote || null; // 'up', 'down', or null
+      });
+      setUserVotes(votesMap);
     } catch (err) {
-        // console.log(data);\
-        // console.log(err)
-      setError(err.message);
+      setError(err.response?.data?.error || 'Failed to load trending prompts');
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle vote actions
-  const handleVote = async (promptId, type) => {
+  const handleVote = useCallback(async (promptId, type) => {
     try {
-      const res = await fetch(`/api/prompts/${promptId}/${type}/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`, // Replace with your auth logic
-          'Content-Type': 'application/json'
+      // Optimistic UI update
+      const newVoteType = userVotes[promptId] === type ? null : type;
+      setUserVotes(prev => ({ ...prev, [promptId]: newVoteType }));
+
+      // Calculate optimistic score changes
+      setPrompts(prev => prev.map(prompt => {
+        if (prompt.id !== promptId) return prompt;
+        
+        const changes = { ...prompt };
+        const currentVote = userVotes[promptId];
+        
+        // If removing vote
+        if (newVoteType === null) {
+          if (currentVote === 'up') changes.upvotes -= 1;
+          if (currentVote === 'down') changes.downvotes -= 1;
+        } 
+        // If changing vote
+        else if (currentVote) {
+          if (type === 'up') {
+            changes.upvotes += 1;
+            changes.downvotes -= (currentVote === 'down' ? 1 : 0);
+          } else {
+            changes.downvotes += 1;
+            changes.upvotes -= (currentVote === 'up' ? 1 : 0);
+          }
+        } 
+        // If new vote
+        else {
+          if (type === 'up') changes.upvotes += 1;
+          else changes.downvotes += 1;
         }
-      });
+        
+        return changes;
+      }));
 
-      if (!res.ok) throw new Error(`Failed to ${type} prompt`);
+      // Make API call
+      const endpoint = type === 'up' ? 'upvote' : 'downvote';
+      const response = await apiClient.post(`prompts/${promptId}/${endpoint}/`);
+      
+      if (response.data.error) {
+        throw new Error(response.data.error);
+      }
 
-      const updatedPrompt = await res.json();
+      // Update with server response
+      setPrompts(prev => prev.map(p => 
+        p.id === promptId ? { 
+          ...p, 
+          upvotes: response.data.upvotes || p.upvotes,
+          downvotes: response.data.downvotes || p.downvotes 
+        } : p
+      ));
 
-      // Update UI
-      setPrompts((prev) =>
-        prev.map((p) =>
-          p.id === promptId ? { ...p, ...updatedPrompt } : p
-        )
-      );
     } catch (err) {
-      console.error(err);
+      console.error("Voting error:", err);
+      setError(err.message || `Failed to ${type}vote`);
+      // Revert optimistic updates
+      fetchTrending(); // Refresh data from server
     }
-  };
+  }, [userVotes]);
 
   useEffect(() => {
     fetchTrending();
   }, []);
+
 
   if (loading) {
     return (
@@ -110,24 +151,58 @@ const TrendingPrompts = () => {
             )}
 
             {/* Voting Controls */}
-            <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-700">
-              <div className="flex space-x-4">
+            <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-700">
+              <div className="flex items-center space-x-3">
+                {/* Upvote Button */}
                 <button
-                  onClick={() => handleVote(prompt.id, 'upvote')}
-                  className="flex items-center gap-1 text-green-400 hover:text-green-300 transition-colors"
+                  onClick={() => handleVote(prompt.id, 'up')}
+                  className={`flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${
+                    userVotes[prompt.id] === 'up'
+                      ? 'bg-emerald-900 text-emerald-400'
+                      : 'bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200'
+                  }`}
+                  aria-label="Upvote"
                 >
-                  ↑ Upvote ({prompt.upvotes})
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  </svg>
                 </button>
-                <button
-                  onClick={() => handleVote(prompt.id, 'downvote')}
-                  className="flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors"
-                >
-                  ↓ Downvote ({prompt.downvotes})
-                </button>
-              </div>
 
-              <div className="text-indigo-400 font-medium">
-                Score: {(prompt.upvotes - prompt.downvotes).toFixed(1)}
+                {/* Score Display */}
+                <div className={`text-lg font-semibold min-w-[24px] text-center ${
+                  (prompt.upvotes - prompt.downvotes) > 0 ? 'text-emerald-400' :
+                  (prompt.upvotes - prompt.downvotes) < 0 ? 'text-rose-400' :
+                  'text-gray-400'
+                }`}>
+                  {prompt.upvotes - prompt.downvotes}
+                </div>
+
+                {/* Downvote Button */}
+                <button
+                  onClick={() => handleVote(prompt.id, 'down')}
+                  className={`flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${
+                    userVotes[prompt.id] === 'down'
+                      ? 'bg-rose-900 text-rose-400'
+                      : 'bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200'
+                  }`}
+                  aria-label="Downvote"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
