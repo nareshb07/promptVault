@@ -4,17 +4,19 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import F, ExpressionWrapper, fields, Count, Exists, OuterRef
+from django.db.models import F, ExpressionWrapper, fields, Count, Exists, OuterRef,Subquery
 from django.db.models.functions import Now, Extract
 from django.utils.timezone import now
 from datetime import timedelta
 import math
 import logging
-from .models import Prompt, Tag
+from .models import Prompt, Tag, PromptVote
 from .serializers import PromptSerializer, TagSerializer, UserSerializer
 from datetime import datetime
 from .pagination import TrendingPromptsPagination
 from django.http import HttpResponse
+
+
 
 
 
@@ -45,15 +47,22 @@ class StandardResultsSetPagination(PageNumberPagination):
 # ======================
 # Prompt ViewSet
 # ======================
+from django.db.models import F, Prefetch
+from .models import PromptVote
 
 class PromptViewSet(viewsets.ModelViewSet):
     serializer_class = PromptSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     pagination_class = StandardResultsSetPagination
 
+
+
+  # adjust if your vote model is named differently
+
     def get_queryset(self):
         queryset = Prompt.objects.all()
 
+        # Handle visibility based on authentication and query params
         if self.request.user.is_authenticated:
             if 'list' in str(self.action):
                 is_public = self.request.query_params.get('is_public')
@@ -65,11 +74,24 @@ class PromptViewSet(viewsets.ModelViewSet):
         else:
             queryset = queryset.filter(is_public=True)
 
+        # Annotate score (upvotes - downvotes)
         queryset = queryset.annotate(
             score=F('upvotes') - F('downvotes')
         )
 
+        # Annotate user_vote using Subquery instead of prefetch_related
+        if self.request.user.is_authenticated:
+            user_vote_subquery = PromptVote.objects.filter(
+                prompt=OuterRef('pk'),
+                user=self.request.user
+            ).values('vote_type')[:1]
+
+            queryset = queryset.annotate(
+                user_vote=Subquery(user_vote_subquery)
+            )
+
         return queryset
+
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
@@ -108,6 +130,9 @@ class TrendingPromptsPagination(StandardResultsSetPagination):
     page_size = 5
     page_size_query_param = 'page_size'
 
+from django.db.models import F
+from .models import PromptVote
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def trending_prompts(request):
@@ -118,14 +143,24 @@ def trending_prompts(request):
       - ?tag=ai
       - ?page=1
     """
-    logger.info("Fetching trending prompts...")  # ✅ Logging
+    logger.info("Fetching trending prompts...")
+    logger.info("Authenticated: %s", request.user.is_authenticated)
+    logger.info("User: %s", request.user)
 
     try:
         tag_name = request.query_params.get('tag', None)
 
-        # 🔍 Optional tag filtering
+        # Base queryset
         queryset = Prompt.objects.filter(is_public=True)
-        print("Queryset:", queryset.query)
+
+        if request.user.is_authenticated:
+            queryset = queryset.prefetch_related(
+                Prefetch(
+                    'promptvote_set',
+                    queryset=PromptVote.objects.filter(user=request.user),
+                    to_attr='user_votes'
+                )
+            )
         if tag_name:
             queryset = queryset.filter(tags__name__iexact=tag_name)
 
@@ -141,10 +176,27 @@ def trending_prompts(request):
         )
 
         prompts = list(queryset)
-        print("Results:", prompts)     
 
+        # --- NEW: Attach user vote if authenticated ---
+        if request.user.is_authenticated:
+            prompt_ids = [p.id for p in prompts]
+            user_votes = PromptVote.objects.filter(
+                user=request.user,
+                prompt_id__in=prompt_ids
+            )
+            vote_map = {vote.prompt_id: vote.vote_type for vote in user_votes}
+
+            # Attach user_vote to each prompt
+            # Attach user_vote (if prefetch was used)
+        for prompt in queryset:
+            if hasattr(prompt, 'user_votes') and prompt.user_votes:
+                prompt.user_vote = prompt.user_votes[0].vote_type
+            else:
+                prompt.user_vote = None
+
+
+        # Define scoring function
         def calculate_trending_score(prompt):
-            """Score = (upvotes - downvotes) / log(age_in_hours + 2)"""
             try:
                 hours_old = prompt.hours_old or (now() - prompt.created_at).total_seconds() / 3600
             except:
@@ -156,14 +208,14 @@ def trending_prompts(request):
         # Sort manually based on trending score
         prompts.sort(key=calculate_trending_score, reverse=True)
 
-        # ✅ Add pagination
+        # Pagination
         paginator = TrendingPromptsPagination()
         page = paginator.paginate_queryset(prompts, request)
 
+        # Serialize with context
         serializer = PromptSerializer(page, many=True, context={'request': request})
-        logger.info(f"Returning {len(serializer.data)} trending prompts")
-        paginated_data=  paginator.get_paginated_response(serializer.data).data
-        print(paginated_data)
+        paginated_data = paginator.get_paginated_response(serializer.data).data
+
         return Response(paginated_data)
 
     except Exception as e:
@@ -232,4 +284,40 @@ def downvote_prompt(request, pk):
 
     except Prompt.DoesNotExist:
         logger.warning("Prompt not found for downvote: %s", pk)
+        return Response({'error': 'Prompt not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def remove_vote(request, pk):
+    user = request.user
+    try:
+        prompt = Prompt.objects.get(pk=pk, is_public=True)
+        
+        try:
+            vote = PromptVote.objects.get(user=user, prompt=prompt)
+            
+            # Update prompt vote counts based on the existing vote type
+            if vote.vote_type == 'up':
+                prompt.upvotes -= 1
+            elif vote.vote_type == 'down':
+                prompt.downvotes -= 1
+            
+            prompt.save(update_fields=['upvotes', 'downvotes'])
+            vote.delete()
+            
+            return Response({
+                'id': prompt.id,
+                'score': prompt.upvotes - prompt.downvotes,
+                'upvotes': prompt.upvotes,
+                'downvotes': prompt.downvotes,
+                'user_vote': None
+            })
+            
+        except PromptVote.DoesNotExist:
+            return Response({
+                'error': 'No vote exists for this user and prompt'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Prompt.DoesNotExist:
+        logger.warning("Prompt not found for remove_vote: %s", pk)
         return Response({'error': 'Prompt not found'}, status=status.HTTP_404_NOT_FOUND)

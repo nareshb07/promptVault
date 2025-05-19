@@ -1,53 +1,57 @@
 # promptVault-backend/prompts/serializers.py
 from rest_framework import serializers
 from django.contrib.auth.models import User # Assuming this is used for UserSerializer
-from .models import Prompt, Tag # Make sure Vote is imported if needed elsewhere
+from .models import Prompt, Tag,PromptVote # Make sure Vote is imported if needed elsewhere
+import logging
 
+logger = logging.getLogger(__name__) 
 class TagSerializer(serializers.ModelSerializer): # This is already good
     class Meta:
         model = Tag
         fields = ['id', 'name']
 
 class PromptSerializer(serializers.ModelSerializer):
-    author_username = serializers.ReadOnlyField(source='author.username') # Good for display
-
-    # This field is for GET requests (reading associated tags)
+    author_username = serializers.ReadOnlyField(source='author.username')
     tags = TagSerializer(many=True, read_only=True)
-
-    # This new field is for POST/PUT requests (writing/setting tags by name)
-    # The frontend will send a list of strings here, e.g., ["coding", "python", "new tag"]
     tag_names = serializers.ListField(
-        child=serializers.CharField(max_length=100), # Each item in the list is a string
-        write_only=True, # This field is only for input, not for output
-        required=False   # Makes sending tags optional
+        child=serializers.CharField(max_length=100),
+        write_only=True,
+        required=False
     )
     score = serializers.SerializerMethodField(read_only=True)
+    user_vote = serializers.SerializerMethodField(read_only=True)  # ← NEW FIELD
 
     class Meta:
         model = Prompt
         fields = [
             'id',
-            'author',         # Keep this for internal linking if needed, but hide from direct write
+            'author',
             'author_username',
             'title',
             'prompt_text',
-            'tags',           # For reading tags
-            'tag_names',      # For writing tags by name
+            'tags',
+            'tag_names',
             'is_public',
             'created_at',
             'updated_at',
             'score',
-            'upvotes',     # ✅ Add this
+            'upvotes',
             'downvotes',
-            
-            # Add 'upvotes_count', 'downvotes_count', 'copied_from' if they are in your model
+            'user_vote',  # ← ADD TO FIELDS
         ]
-        read_only_fields = ['author', 'author_username', 'created_at', 'updated_at'] # 'author' set in create/update
-    
+        read_only_fields = ['author', 'author_username', 'created_at', 'updated_at']
     
     def get_score(self, obj):
         # Use a simple net score for now; can expand later
         return obj.upvotes - obj.downvotes
+    
+
+
+
+    
+    def get_user_vote(self, obj):
+        return getattr(obj, 'user_vote', None)
+
 
 
     def _handle_tags(self, prompt_instance, tag_names_data):
@@ -107,3 +111,29 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email']
+
+
+
+
+# catching 
+
+    # from django.core.cache import cache
+
+    # def get_user_vote(self, obj):
+    #     request = self.context.get('request')
+    #     if not request or not request.user.is_authenticated:
+    #         return None
+
+    #     cache_key = f"user_vote:{request.user.id}:{obj.id}"
+    #     cached_vote = cache.get(cache_key)
+        
+    #     if cached_vote is not None:
+    #         return cached_vote
+
+    #     vote = obj.votes.filter(user=request.user).first()
+    #     if vote:
+    #         cache.set(cache_key, vote.vote_type, timeout=60*10)  # Cache for 10 mins
+    #         return vote.vote_type
+        
+    #     cache.set(cache_key, None, timeout=60*10)
+    #     return None

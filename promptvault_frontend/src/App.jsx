@@ -17,8 +17,8 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 font-sans text-gray-100">
-      <nav className="bg-gray-800 border-b border-gray-700 p-4 shadow-lg">
+    <div className="min-h-screen bg-slate-800  font-sans text-gray-100">
+      <nav className="bg-neutral-800  border-b border-gray-700 p-4 shadow-lg">
         <div className="container mx-auto flex justify-between items-center">
           <Link 
             to="/" 
