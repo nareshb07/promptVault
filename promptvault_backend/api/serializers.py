@@ -11,7 +11,7 @@ class TagSerializer(serializers.ModelSerializer): # This is already good
         fields = ['id', 'name']
 
 class PromptSerializer(serializers.ModelSerializer):
-    author_username = serializers.ReadOnlyField(source='author.username')
+    user_username = serializers.ReadOnlyField(source='user.username')
     tags = TagSerializer(many=True, read_only=True)
     tag_names = serializers.ListField(
         child=serializers.CharField(max_length=100),
@@ -25,8 +25,8 @@ class PromptSerializer(serializers.ModelSerializer):
         model = Prompt
         fields = [
             'id',
-            'author',
-            'author_username',
+            'user',
+            'user_username',
             'title',
             'prompt_text',
             'tags',
@@ -39,7 +39,7 @@ class PromptSerializer(serializers.ModelSerializer):
             'downvotes',
             'user_vote',  # ← ADD TO FIELDS
         ]
-        read_only_fields = ['author', 'author_username', 'created_at', 'updated_at']
+        read_only_fields = ['user', 'user_username', 'created_at', 'updated_at']
     
     def get_score(self, obj):
         # Use a simple net score for now; can expand later
@@ -79,7 +79,7 @@ class PromptSerializer(serializers.ModelSerializer):
         tag_names_data = validated_data.pop('tag_names', []) # Default to empty list if not provided
 
         # Set the author to the current user
-        validated_data['author'] = self.context['request'].user
+        validated_data['user'] = self.context['request'].user
         
         prompt_instance = Prompt.objects.create(**validated_data)
         

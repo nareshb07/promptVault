@@ -29,7 +29,7 @@ const PromptList = ({ prompts, isLoading, error, onEdit, onDelete, onCopy }) => 
 
   return (
     <div className="grid gap-6 mb-8">
-      {prompts.map(prompt => (
+      {prompts.map((prompt) => (
         <PromptCard
           key={prompt.id}
           prompt={prompt}
@@ -43,4 +43,3 @@ const PromptList = ({ prompts, isLoading, error, onEdit, onDelete, onCopy }) => 
 };
 
 export default PromptList;
-

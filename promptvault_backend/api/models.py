@@ -3,19 +3,29 @@ from django.contrib.auth.models import User # Using Django's built-in User
 
 class Tag(models.Model):
     name = models.CharField(max_length=50, unique=True)
+    is_predefined = models.BooleanField(default=False)
+
     # is_predefined = models.BooleanField(default=False) # We can add this later in Phase 2
 
     def __str__(self):
         return self.name
 
 class Prompt(models.Model):
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='prompts')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='prompts')
     title = models.CharField(max_length=200)
     prompt_text = models.TextField()
     tags = models.ManyToManyField(Tag, related_name='prompts', blank=True)
     is_public = models.BooleanField(default=False) # All private for now
     upvotes = models.PositiveIntegerField(default=0)
     downvotes = models.PositiveIntegerField(default=0)
+     # Track origin of copied prompts
+    copied_from = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='copies'
+    )
     
     # copied_from = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='copies') # Add later
     created_at = models.DateTimeField(auto_now_add=True)

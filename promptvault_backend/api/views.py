@@ -37,7 +37,7 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return obj.author == request.user
+        return obj.user == request.user
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 5
@@ -70,7 +70,7 @@ class PromptViewSet(viewsets.ModelViewSet):
                     queryset = queryset.filter(is_public=(is_public.lower() == 'true'))
                 else:
                     if not self.request.user.is_superuser:
-                        queryset = queryset.filter(author=self.request.user)
+                        queryset = queryset.filter(user=self.request.user)
         else:
             queryset = queryset.filter(is_public=True)
 
@@ -94,7 +94,7 @@ class PromptViewSet(viewsets.ModelViewSet):
 
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        serializer.save(user=self.request.user)
 
 # ======================
 # Tag ViewSet
@@ -321,3 +321,52 @@ def remove_vote(request, pk):
     except Prompt.DoesNotExist:
         logger.warning("Prompt not found for remove_vote: %s", pk)
         return Response({'error': 'Prompt not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def copy_prompt(request, prompt_id):
+    try:
+        # Get the original public prompt
+        original_prompt = Prompt.objects.get(id=prompt_id, is_public=True)
+        
+        # Prevent duplicate: Check if user already has a copy of the same content
+        if Prompt.objects.filter(
+            user=request.user,
+            prompt_text=original_prompt.prompt_text
+        ).exists():
+            return Response({
+                "error": "You already have this prompt in your collection."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create a new prompt for the current user
+        copied_prompt = Prompt.objects.create(
+            user=request.user,
+            title=original_prompt.title,
+            prompt_text=original_prompt.prompt_text,
+            is_public=False,  # Default to private
+            copied_from=original_prompt  # Track origin
+        )
+
+        # Copy tags
+        copied_prompt.tags.set(original_prompt.tags.all())
+
+        # Serialize the new prompt for response
+        serializer = PromptSerializer(copied_prompt, context={'request': request})
+
+        return Response({
+            "message": "Prompt added successfully",
+            "prompt": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    except Prompt.DoesNotExist:
+        return Response({
+            "error": "Prompt not found or is not public"
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        return Response({
+            "error": "Failed to add prompt",
+            "details": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -1,6 +1,8 @@
-import React, { useEffect, useState, useCallback, use } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import apiClient from '../services/api';
 import Icons from "../Icons/Icons";
+import { toast, ToastContainer } from 'react-toastify'; // 👈 Added ToastContainer
+import 'react-toastify/dist/ReactToastify.css';
 
 const TrendingPrompts = () => {
   const [prompts, setPrompts] = useState([]);
@@ -11,7 +13,7 @@ const TrendingPrompts = () => {
   const [copiedPromptId, setCopiedPromptId] = useState(null);
   const [addedPromptIds, setAddedPromptIds] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [url, setUrl] = useState("https://tailwindcss.com/docs/text-align#examples");
+  const [url, setUrl] = useState("https://tailwindcss.com/docs/text-align #examples");
 
   // Fetch trending prompts
   const fetchTrending = async () => {
@@ -21,7 +23,6 @@ const TrendingPrompts = () => {
       const response = await apiClient.get('/prompts/trending/');
       const promptsData = response.data.results || [];
       setPrompts(promptsData);
-
       const votes = {};
       promptsData.forEach((p) => {
         votes[p.id] = p.user_vote || null;
@@ -47,15 +48,14 @@ const TrendingPrompts = () => {
       setPrompts((prev) =>
         prev.map((p) => {
           if (p.id !== promptId) return p;
-
           let up = p.upvotes;
           let down = p.downvotes;
 
           // Remove previous vote if exists
           if (currentVote === 'up') up -= 1;
           if (currentVote === 'down') down -= 1;
-          
-          // Add new vote if not null (not a toggle off)
+
+          // Add new vote if not null
           if (newVote === 'up') up += 1;
           if (newVote === 'down') down += 1;
 
@@ -66,9 +66,16 @@ const TrendingPrompts = () => {
       try {
         const endpoint = newVote ? `${type}vote` : 'remove_vote';
         await apiClient.post(`/prompts/${promptId}/${endpoint}/`);
+
+        // Show success toast
+        toast.success(`👍 ${type.charAt(0).toUpperCase()}${type.slice(1)}voted successfully!`, {
+          autoClose: 1000,
+          position: "bottom-center",
+        });
+
       } catch (err) {
         console.error('Voting error:', err);
-        
+
         // Revert on error
         setUserVotes((prev) => ({ ...prev, [promptId]: currentVote }));
         setPrompts((prev) =>
@@ -79,14 +86,12 @@ const TrendingPrompts = () => {
             score: p.upvotes - p.downvotes
           } : p)
         );
-        
-        setError(err.response?.data?.message || 'Failed to register vote. Please try again.');
-        setTimeout(() => setError(null), 3000);
+
+        toast.error("❌ Failed to register vote. Please try again.");
       }
     },
     [userVotes]
   );
-
 
   // Toggle expand/collapse prompt text
   const toggleExpanded = (id) => {
@@ -97,35 +102,73 @@ const TrendingPrompts = () => {
   };
 
   // Add or remove prompt from added list
-  const handleAddPrompt = (promptId) => {
-    setAddedPromptIds((prev) =>
-      prev.includes(promptId)
-        ? prev.filter((id) => id !== promptId)
-        : [...prev, promptId]
-    );
+  const handleAddPrompt = async (promptId) => {
+    // Early exit if already added
+    if (addedPromptIds.includes(promptId)) return;
+
+    // Optimistically update UI
+    setAddedPromptIds((prev) => [...prev, promptId]);
+
+    try {
+      const res = await apiClient.post(`/prompts/copy/${promptId}/`);
+      console.log(res.data.message);
+      toast.success("✅ Prompt added successfully!", {
+        autoClose: 2000,
+        position: "bottom-center",
+      });
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || 'Failed to add prompt';
+      console.error(errorMsg);
+
+      if (errorMsg === "You already have this prompt in your collection.") {
+        toast.info("💡 Already in your collection", {
+          autoClose: 2000,
+          position: "bottom-center",
+        });
+      } else {
+        toast.error("❌ Failed to add prompt");
+      }
+
+      // Revert on error
+      setAddedPromptIds((prev) => prev.filter((id) => id !== promptId));
+    }
   };
 
   // Copy prompt text to clipboard
   const handleCopy = (text, id) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedPromptId(id);
+      toast.success("📋 Prompt text copied to clipboard!", {
+        autoClose: 2000,
+        position: "bottom-center",
+      });
       setTimeout(() => setCopiedPromptId(null), 5000);
+    }).catch((err) => {
+      console.error('Clipboard error:', err);
+      toast.error("❌ Failed to copy prompt text. Please try again.");
     });
   };
 
   // Load trending prompts on mount
   useEffect(() => {
     fetchTrending();
-    
   }, []);
 
   // Filter prompts by title or author
-  const filteredPrompts = prompts.filter(
-    (prompt) =>
-      prompt.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      prompt.author_username?.toLowerCase().includes(searchQuery.toLowerCase())
+ const filteredPrompts = prompts.filter((prompt) => {
+  const query = searchQuery.toLowerCase();
+
+  // Match title or author
+  const matchesTitle = prompt.title.toLowerCase().includes(query);
+  const matchesAuthor = prompt.user_username?.toLowerCase().includes(query);
+
+  // Match any tag name
+  const matchesTag = prompt.tags?.some((tag) =>
+    tag.name.toLowerCase().includes(query)
   );
 
+  return matchesTitle || matchesAuthor || matchesTag;
+});
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -182,7 +225,6 @@ const TrendingPrompts = () => {
             const vote = userVotes[prompt.id];
             const isExpanded = expandedPrompts[prompt.id];
             const isAdded = addedPromptIds.includes(prompt.id);
-
             return (
               <div
                 key={prompt.id}
@@ -202,8 +244,8 @@ const TrendingPrompts = () => {
                         }}
                         className={`p-2 transition-colors rounded-full ${
                           copiedPromptId === prompt.id
-                            ? 'bg-gray-200 text-gray-900 hover:bg-gray-900 hover:text-gray-200'
-                            : 'hover:bg-gray-200 hover:text-gray-900 bg-gray-900 text-gray-200'
+                            ? ' text-gray-900  hover:text-gray-200'
+                            : ' hover:text-gray-900  text-gray-200'
                         }`}
                         title="Copy to clipboard"
                       >
@@ -218,9 +260,10 @@ const TrendingPrompts = () => {
                           e.stopPropagation();
                           handleAddPrompt(prompt.id);
                         }}
+                        disabled={isAdded}
                         className={`rounded-full p-2 transition-colors ${
                           isAdded
-                            ? 'bg-gray-200 text-gray-900 hover:bg-gray-900 hover:text-gray-200'
+                            ? 'bg-gray-500 text-gray-300 cursor-not-allowed'
                             : 'hover:bg-gray-200 hover:text-gray-900 bg-gray-900 text-gray-200'
                         }`}
                         title={isAdded ? 'Already added' : 'Add to your prompts'}
@@ -233,7 +276,6 @@ const TrendingPrompts = () => {
                       </button>
                     </div>
                   </div>
-
                   {/* Tags */}
                   {prompt.tags?.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5 px-2">
@@ -248,7 +290,6 @@ const TrendingPrompts = () => {
                     </div>
                   )}
                 </div>
-
                 {/* Prompt Text */}
                 <p className="mt-2 text-xs px-3 text-justify font-mono italic text-gray-300 whitespace-pre-wrap">
                   {isExpanded
@@ -258,37 +299,34 @@ const TrendingPrompts = () => {
                   {prompt.prompt_text.length > 200 && (
                     <button
                       onClick={() => toggleExpanded(prompt.id)}
-                      className="ml-1 text-gray-600 hover:text-gray-400 text-sm inline"
+                      className="ml-1 text-indigo-400 hover:text-indigo-300 underline text-sm inline"
                     >
-                      {isExpanded ? 'Less' : 'More'}
+                      {isExpanded ? "Show less" : "Read more"}
                     </button>
                   )}
                 </p>
-
                 {/* Voting */}
                 <div className="px-3 flex justify-between items-center mt-2 pt-2 border-t border-gray-700">
                   <div className="flex items-center space-x-3 bg-gray-800 rounded-lg">
                     <button
                       onClick={() => handleVote(prompt.id, 'up')}
                       className={`flex items-center justify-center w-7 h-7 rounded-full transition-colors ${
-                        vote === 'up' 
-                          ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                        vote === 'up'
+                          ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                       }`}
                       aria-label="Upvote"
                     >
                       <Icons name="arrowUp" className="h-5 w-5" />
                     </button>
-                    
                     <div className="text-md font-semibold text-center text-gray-100 max-w-5px]">
                       {prompt.score}
                     </div>
-                    
                     <button
                       onClick={() => handleVote(prompt.id, 'down')}
                       className={`flex items-center justify-center w-7 h-7 rounded-full transition-colors ${
-                        vote === 'down' 
-                          ? 'bg-red-600 text-white hover:bg-red-700' 
+                        vote === 'down'
+                          ? 'bg-red-600 text-white hover:bg-red-700'
                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                       }`}
                       aria-label="Downvote"
@@ -296,29 +334,30 @@ const TrendingPrompts = () => {
                       <Icons name="arrowDown" className="h-5 w-5" />
                     </button>
                   </div>
-                  
-                 <p className="text-xs font-mono text-gray-400 mt-1">
-                  by{' '}
-                  {prompt.author_username ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:underline hover:text-sky-500"
-                    >
-                      @{prompt.author_username}
-                    </a>
-                  ) : (
-                    <span>Anonymous</span>
-                  )}
-                </p>
-
+                  <p className="text-xs font-mono text-gray-400 mt-1">
+                    by{' '}
+                    {prompt.user_username ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:underline hover:text-sky-500"
+                      >
+                        @{prompt.user_username}
+                      </a>
+                    ) : (
+                      <span>Anonymous</span>
+                    )}
+                  </p>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      {/* 🧨 Required: Toast Container 😎 */}
+      <ToastContainer />
     </div>
   );
 };
