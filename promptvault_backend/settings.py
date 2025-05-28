@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
-import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -59,7 +58,6 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
     
 
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -186,31 +184,17 @@ LOGOUT_REDIRECT_URL = '/' # Where to redirect after logout (Django's perspective
 
 # settings.py
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'postgres',           # e.g. aptitude_db
-#         'USER': 'postgres',           # e.g. postgres
-#         'PASSWORD': '1243',   # e.g. your password
-#         'HOST': 'localhost',              # or the actual DB host
-#         'PORT': '5432',                   # default PostgreSQL port
-#     }
-# }
-
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'postgres',           # e.g. aptitude_db
         'USER': 'postgres',           # e.g. postgres
-        'PASSWORD': 'Blindhorse@1234',   # e.g. your password
-        'HOST': 'db.qjzluxzgmhmirtaajldk.supabase.co',              # or the actual DB host
+        'PASSWORD': '1243',   # e.g. your password
+        'HOST': 'localhost',              # or the actual DB host
         'PORT': '5432',                   # default PostgreSQL port
-        'OPTIONS': {
-            'sslmode': 'require',  # Supabase requires SSL
-        },
     }
 }
+
 
 # DATABASES = {
 #     'default': {
@@ -254,10 +238,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-# STATIC_URL = 'static/'
-STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATIC_URL = 'static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
